@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>俺たちを煮るか捨てるか決めてくれ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* (CSSは一部変更・追加されています) */
+    :root { --header-height: 60px; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: linear-gradient(to bottom, #ffe4c4, #fffacd);
+      margin: 0; padding-top: var(--header-height); color: #333;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center; padding: 1rem;
+      background-color: #ff7f50; color: white; position: fixed; top: 0; left: 0;
+      width: 100%; box-sizing: border-box; z-index: 1000;
+    }
+    h1 { margin: 0; font-size: 1.2rem; cursor: pointer; }
+    .menu-toggle { font-size: 1.5rem; cursor: pointer; }
+    nav {
+      display: none; flex-direction: column; background-color: #ffa07a;
+      position: absolute; top: var(--header-height); right: 10px;
+      border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    nav.open { display: flex; }
+    nav a { padding: 10px 15px; color: white; text-decoration: none; font-weight: bold; cursor: pointer; }
+    .page-container { max-width: 900px; margin: auto; padding: 1rem; }
+    .hidden { display: none; }
+    .input-area {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;
+      background: white; padding: 1rem; border-radius: 8px;
+    }
+    .input-area input, .input-area select, .input-area button {
+      padding: 0.5rem; border-radius: 8px; border: 1px solid #ccc; flex-grow: 1;
+    }
+    .input-area button { flex-grow: 0; background-color: #ff7f50; color: white; cursor: pointer; }
+    #drop-zone {
+      border: 2px dashed #ff8c00; padding: 1rem; margin-top: 1rem; text-align: center;
+      background: #fff5e1; border-radius: 8px; transition: background-color 0.2s;
+    }
+    #drop-zone.dragover { background-color: #ffddab; }
+    .card-grid { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+    .card {
+      background: #fffaf0; border: 2px solid #deb887; border-radius: 10px; padding: 1rem;
+      width: 200px; box-shadow: 2px 2px 6px rgba(0,0,0,0.2); text-align: center;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .card.near-expiry { border-color: #f0ad4e; background-color: #fcf8e3; }
+    .card.expired { border-color: #d9534f; background-color: #f2dede; opacity: 0.8; }
+    .card img {
+      width: 80px; height: 80px; object-fit: cover; border-radius: 50%;
+      background: #eee; margin: 0 auto 0.5rem auto; border: 2px solid white;
+    }
+    .card .dialog { font-size: 0.9em; font-style: italic; color: #555; min-height: 50px; }
+    .card button { margin: 0.25rem; padding: 0.4rem 0.8rem; border: none; border-radius: 6px; cursor: pointer; background-color: #ffb347; color: white; }
+    .diary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;}
+    .diary-header h2, #analytics-page h2 { margin: 0; }
+    #diary-page details { background: #fff; border-radius: 8px; margin-bottom: 1em; border: 1px solid #ddd; }
+    #diary-page summary { padding: 1em; font-weight: bold; font-size: 1.1em; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+    .diary-group-heading { font-size: 1.5em; margin: 1.5em 0 0.5em 0; border-bottom: 2px solid #ff7f50; padding-bottom: 0.3em; display: flex; align-items: center; gap: 10px; }
+    .diary-group-heading img { width: 30px; height: 30px; }
+    .log-entry { padding: 1.5em; border-top: 1px solid #eee; display: flex; gap: 1.5em; align-items: flex-start; }
+    .log-entry img { width: 60px; height: 60px; object-fit: cover; border-radius: 50%; background: #eee; flex-shrink: 0; }
+    .log-details { flex-grow: 1; }
+    .diary-table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+    .diary-table th, .diary-table td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    .diary-table th { background-color: #f9f9f9; }
+    .status-dot { font-size: 1.2em; vertical-align: middle; margin-right: 0.5em; }
+    .cooked { color: #28a745; } .disposed { color: #dc3545; }
+    .diary-conversation { background-color: #fdfdfd; padding: 1em; border-radius: 5px; border: 1px solid #f0f0f0; }
+    .dialog-title { font-weight: bold; margin-top: 0; margin-bottom: 0.8em; font-size: 0.9em; color: #555; }
+    .dialog-line { margin: 0.5em 0; }
+    .dialog-label { display: inline-block; background-color: #e7e7e7; color: #333; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; margin-right: 1em; width: 40px; text-align: center; }
+    .clear-history-btn { display: block; margin: 1rem auto; padding: 0.5rem 1rem; border: 1px solid #dc3545; background-color: #f8d7da; color: #721c24; border-radius: 5px; cursor: pointer; }
+
+    .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; }
+    .analytics-card { background: white; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .analytics-card h3 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 0.5em; display: flex; justify-content: space-between; align-items: center; }
+    .analytics-card p { font-size: 2.5em; font-weight: bold; text-align: center; color: #ff7f50; margin: 0.5em 0; }
+    
+    #toast-container {
+        position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex;
+        flex-direction: column; gap: 10px; pointer-events: none;
+    }
+    .toast {
+        background-color: #28a745; color: white; padding: 15px 20px; border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2); opacity: 0;
+        transform: translateY(120%); transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background-color: #dc3545; }
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.6); z-index: 10000;
+        display: flex; justify-content: center; align-items: center;
+        opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal-content {
+        background: white; padding: 2em; border-radius: 8px; text-align: center;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        transform: scale(0.9); transition: transform 0.3s;
+    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
+    .modal-content p { margin: 0 0 1.5em 0; }
+    .modal-buttons button { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; margin: 0 10px; }
+    #modal-confirm-btn { background: #dc3545; color: white; }
+    #modal-cancel-btn { background: #ccc; }
+
+    footer { text-align: center; padding: 2rem 0; font-size: 0.8em; color: #666; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 onclick="showPage('home')">俺たちを煮るか捨てるか決めてくれ</h1>
+    <div class="menu-toggle" onclick="toggleMenu()">☰</div>
+    <nav id="nav-menu">
+      <a onclick="showPage('home')">ホーム</a>
+      <a onclick="showPage('diary-page')">日記まとめ</a>
+      <a onclick="showPage('analytics-page')">データ分析</a>
+    </nav>
+  </header>
+
+  <div id="home" class="page-container">
+    <div class="input-area">
+      <input type="text" id="name" placeholder="食材名"><input type="date" id="expiry">
+      <select id="type">
+        <option value="vegetable">野菜</option><option value="meat">肉</option><option value="fish">魚</option>
+        <option value="egg">卵</option><option value="dairy">乳製品</option><option value="snack">お菓子</option>
+        <option value="other">その他</option>
+      </select>
+      <button id="add-btn" type="button">追加</button>
+    </div>
+    <div id="drop-zone">ここに画像をドラッグ＆ドロップ</div>
+    <div id="ingredient-list" class="card-grid"></div>
+  </div>
+
+  <div id="diary-page" class="page-container hidden">
+    <div class="diary-header">
+      <h2>📝 日記まとめ</h2>
+      <div>
+        <label for="sort-diary">並び替え:</label>
+        <select id="sort-diary" onchange="displayDiary()">
+          <option value="processedDate">処理が新しい順</option>
+          <option value="type">種類別</option>
+        </select>
+      </div>
+    </div>
+    <div id="diary-summary"></div>
+    <button class="clear-history-btn" onclick="showClearConfirmModal()">全データと履歴を削除</button>
+  </div>
+
+  <div id="analytics-page" class="page-container hidden">
+    <div class="diary-header"><h2>📊 データ分析</h2></div>
+    <div class="analytics-grid">
+      <div class="analytics-card">
+        <h3>平均処理日数</h3>
+        <p id="avg-processing-time">- 日</p>
+      </div>
+      <div class="analytics-card">
+        <h3>
+          <span>処理トレンド</span>
+          <select id="trend-period" onchange="displayAnalytics()">
+            <option value="7days">過去7日間</option>
+            <option value="30days">過去30日間</option>
+            <option value="byMonth">月別 (年間)</option>
+          </select>
+        </h3>
+        <canvas id="trend-chart"></canvas>
+      </div>
+      <div class="analytics-card" style="grid-column: 1 / -1;">
+        <h3>食材種類別 処理統計</h3>
+        <canvas id="type-stats-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <div id="confirm-modal" class="modal-overlay">
+    <div class="modal-content">
+      <p>本当にすべてのデータを削除しますか？<br>この操作は元に戻せません。</p>
+      <div class="modal-buttons">
+        <button id="modal-confirm-btn">削除する</button><button id="modal-cancel-btn">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <footer><p>© 2025 冷蔵庫人格研究所</p></footer>
+
+  <script>
+    let droppedImageData = null;
+    let trendChartInstance = null;
+    let typeStatsChartInstance = null;
+    const personalities = {
+      vegetable: "おっとり", meat: "熱血漢", fish: "クール", egg: "繊細", dairy: "ネガティブ", snack: "元気っ子", other: ["謎めいた", "皮肉屋", "無口"]
+    };
+
+    function toggleMenu() { document.getElementById("nav-menu").classList.toggle("open"); }
+    function showPage(pageId) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        document.querySelectorAll('.page-container').forEach(p => p.classList.add('hidden'));
+        const page = document.getElementById(pageId);
+        if (page) {
+            page.classList.remove('hidden');
+            if (pageId === 'analytics-page') displayAnalytics();
+        }
+        if (document.getElementById("nav-menu").classList.contains("open")) toggleMenu();
+    }
+    
+    // ★★★★★ BUG FIX: この関数が抜けていたのが原因でした ★★★★★
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+      }, 3000);
+    }
+    
+    function getDaysLeft(expiry) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const date = new Date(expiry);
+        date.setHours(0, 0, 0, 0);
+        return Math.ceil((date - today) / (1000 * 60 * 60 * 24));
+    }
+    function generateDialog(name, type, daysLeft) {
+        const style = Array.isArray(personalities[type]) ? personalities[type][Math.floor(Math.random() * personalities[type].length)] : personalities[type] || "普通";
+        if (daysLeft < 0) return `${name}：${getDialogByStyle(style, "expired")}`;
+        if (daysLeft === 0) return `${name}：${getDialogByStyle(style, "today")}`;
+        return `${name}：${getDialogByStyle(style, "remaining", daysLeft)}`;
+    }
+    function getDialogByStyle(style, status, daysLeft = 0) {
+        const dialogs = {
+            expired: { 熱血漢: "くっ…もう間に合わないだと！？", クール: "…もう遅いか。", 繊細: "ひっ…もうだめなの？", ネガティブ: "ほらね、やっぱりダメだった。", 元気っ子: "うわーん！賞味期限切れちゃったー！", おっとり: "あら〜残念ねぇ…", 謎めいた: "時は満ちた…か。", 皮肉屋: "どうせ誰も食べやしないと思ってたよ。", 無口: "…………。" },
+            today: { 熱血漢: "今日が勝負の日だ！やってやるぜ！", クール: "決着をつけよう。", 繊細: "今日しかない…頑張らなきゃ…！", ネガティブ: "今日で終わりか…私。", 元気っ子: "いよいよ今日！楽しみ〜♪", おっとり: "今日はなんだかドキドキするわ〜", 謎めいた: "運命の日だな…。", 皮肉屋: "せいぜい今日の内に使い切るんだな。", 無口: "…今日だ。" },
+            remaining: { 熱血漢: `あと${daysLeft}日か！気合い入れていこうぜ！`, クール: `残り${daysLeft}日。悪くない。`, 繊細: `あと${daysLeft}日…ドキドキする…`, ネガティブ: `どうせあと${daysLeft}日で捨てられるんでしょ…`, 元気っ子: `あと${daysLeft}日！まだまだ元気だよ〜！`, おっとり: `あと${daysLeft}日、ゆっくりしていこうね〜`, 謎めいた: `…${daysLeft}日後、何かが起こる。`, 皮肉屋: `あと${daysLeft}日か。早く使ってくれないかな。`, 無口: `…あと${daysLeft}日。` }
+        };
+        return dialogs[status][style] || "よろしくね！";
+    }
+    function getGratitudeMessage(name, type) {
+        const style = Array.isArray(personalities[type]) ? personalities[type][Math.floor(Math.random() * personalities[type].length)] : personalities[type] || "普通";
+        const message = { 熱血漢: "うおおっ！最高の料理にしてくれよな！", クール: "キミに調理されるなら本望だ。", 繊細: "わ、私でいいの…？美味しくしてね…！", ネガティブ: "どうせ美味しくないんだろうけど…まあ、いいよ。", 元気っ子: "やったー！どんな料理になるかワクワク！", おっとり: "うふふ、美味しくしてちょうだいねぇ。", 謎めいた: "フフ…新たな形となる時が来たか。", 皮肉屋: "やっとかい。待ちくたびれたよ。", 無口: "…頼む。" }[style] || "ありがとう！";
+        return `${name}：「${message}」`;
+    }
+    function getFarewellMessage(name, type) {
+        const style = Array.isArray(personalities[type]) ? personalities[type][Math.floor(Math.random() * personalities[type].length)] : personalities[type] || "普通";
+        const message = { 熱血漢: "最後まで戦えなくて…すまん…！", クール: "これが運命か…仕方ない。", 繊細: "ご、ごめんなさい…役に立てなくて…", ネガティブ: "やっぱりこうなる運命だったんだ…。", 元気っ子: "バイバーイ！またどこかで会おうね！", おっとり: "あらあら、仕方ないわねぇ…さようなら。", 謎めいた: "消えるのではない。還るだけだ。", 皮肉屋: "やっぱりね。期待して損したよ。", 無口: "……さらばだ。" }[style] || "さようなら…";
+        return `${name}：「${message}」`;
+    }
+
+    function saveToDiary(item, status, finalDialog) {
+        const diary = JSON.parse(localStorage.getItem("diary") || "[]");
+        const log = {
+            name: item.name, addDate: item.addDate, expiry: item.expiry, status: status,
+            processedDate: new Date().toISOString(), initialDialog: item.initialDialog,
+            finalDialog: finalDialog, userImage: item.userImage, type: item.type
+        };
+        diary.unshift(log);
+        localStorage.setItem("diary", JSON.stringify(diary));
+    }
+    
+    function displayIngredients() {
+      const list = document.getElementById("ingredient-list");
+      list.innerHTML = "";
+      const ingredients = JSON.parse(localStorage.getItem("ingredients") || "[]");
+      ingredients.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const daysLeft = getDaysLeft(item.expiry);
+        if (daysLeft < 0) card.classList.add("expired");
+        else if (daysLeft <= 3) card.classList.add("near-expiry");
+        const img = document.createElement("img");
+        img.src = item.userImage || `イラスト/${item.type}.png`;
+        img.onerror = () => { img.src = `イラスト/other.png`; };
+        const text = document.createElement("p");
+        text.innerHTML = `<strong>${item.name}</strong><br>期限: ${item.expiry}`;
+        const dialog = document.createElement("p");
+        dialog.className = "dialog";
+        dialog.textContent = generateDialog(item.name, item.type, daysLeft);
+        const btnContainer = document.createElement("div");
+        const cookBtn = document.createElement("button"); cookBtn.textContent = "🍳 料理する";
+        cookBtn.onclick = () => {
+            const msg = getGratitudeMessage(item.name, item.type); showToast(msg);
+            saveToDiary(item, "調理", msg);
+            const current = JSON.parse(localStorage.getItem("ingredients") || "[]");
+            const filtered = current.filter(i => i.addDate !== item.addDate);
+            localStorage.setItem("ingredients", JSON.stringify(filtered));
+            displayIngredients(); displayDiary();
+        };
+        const expireBtn = document.createElement("button"); expireBtn.textContent = "🗑️ 期限切れ処理";
+        expireBtn.onclick = () => {
+            const msg = getFarewellMessage(item.name, item.type); showToast(msg);
+            saveToDiary(item, "廃棄", msg);
+            const current = JSON.parse(localStorage.getItem("ingredients") || "[]");
+            const filtered = current.filter(i => i.addDate !== item.addDate);
+            localStorage.setItem("ingredients", JSON.stringify(filtered));
+            displayIngredients(); displayDiary();
+        };
+        btnContainer.appendChild(cookBtn); btnContainer.appendChild(expireBtn);
+        card.appendChild(img); card.appendChild(text); card.appendChild(dialog); card.appendChild(btnContainer);
+        list.appendChild(card);
+      });
+    }
+
+    function displayDiary() {
+        const diaryContainer = document.getElementById("diary-summary");
+        diaryContainer.innerHTML = "";
+        const diary = JSON.parse(localStorage.getItem("diary") || "[]");
+        if (diary.length === 0) {
+            diaryContainer.innerHTML = "<p>日記はまだありません。</p>"; return;
+        }
+        const sortType = document.getElementById('sort-diary').value;
+        if (sortType === 'type') {
+            const typeOrder = { "vegetable": 1, "meat": 2, "fish": 3, "egg": 4, "dairy": 5, "snack": 6, "other": 7 };
+            const groupedByType = diary.reduce((acc, log) => {
+                if (!acc[log.type]) acc[log.type] = [];
+                acc[log.type].push(log);
+                return acc;
+            }, {});
+            Object.keys(groupedByType).sort((a,b) => (typeOrder[a]||99) - (typeOrder[b]||99)).forEach(type => {
+                const heading = document.createElement("h3");
+                heading.className = "diary-group-heading";
+                const typeText = document.querySelector(`#type option[value=${type}]`).textContent;
+                heading.innerHTML = `<img src="イラスト/${type}.png" onerror="this.src='イラスト/other.png'"> <span>${typeText}</span>`;
+                diaryContainer.appendChild(heading);
+                groupedByType[type]
+                    .sort((a,b) => new Date(b.processedDate) - new Date(a.processedDate))
+                    .forEach(log => diaryContainer.appendChild(createDiaryEntry(log)));
+            });
+        } else { // processedDate
+            [...diary]
+                .sort((a,b) => new Date(b.processedDate) - new Date(a.processedDate))
+                .forEach(log => diaryContainer.appendChild(createDiaryEntry(log, true)));
+        }
+    }
+    
+    function createDiaryEntry(log, showDateInSummary = false) {
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        const processDate = new Date(log.processedDate).toLocaleDateString();
+        summary.textContent = showDateInSummary ? `${log.name}（${processDate}）` : log.name;
+        details.appendChild(summary);
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const img = document.createElement("img");
+        img.src = log.userImage || `イラスト/${log.type}.png`;
+        img.onerror = () => { img.src = `イラスト/other.png`; };
+        const logDetails = document.createElement("div");
+        logDetails.className = "log-details";
+        const statusText = log.status === '調理' ? '調理' : '廃棄';
+        const statusClass = log.status === '調理' ? 'cooked' : 'disposed';
+        const initialDialogText = log.initialDialog || `${log.name || 'この子'}：「記録なし」`;
+        const finalDialogText = log.finalDialog || `${log.name || 'この子'}：「記録なし」`;
+        logDetails.innerHTML = `
+            <table class="diary-table">
+              <thead><tr><th>処理日</th><th>登録日</th><th>期限日</th><th>結果</th></tr></thead>
+              <tbody><tr>
+                <td>${new Date(log.processedDate).toLocaleString()}</td>
+                <td>${new Date(log.addDate).toLocaleDateString()}</td>
+                <td>${log.expiry}</td>
+                <td><span class="status-dot ${statusClass}">●</span> ${statusText}</td>
+              </tr></tbody>
+            </table>
+            <div class="diary-conversation">
+              <p class="dialog-title">会話ログ</p>
+              <p class="dialog-line"><span class="dialog-label">登場</span>${initialDialogText}</p>
+              <p class="dialog-line"><span class="dialog-label">結末</span>${finalDialogText}</p>
+            </div>`;
+        entry.appendChild(img); entry.appendChild(logDetails);
+        details.appendChild(entry);
+        return details;
+    }
+
+    function displayAnalytics() {
+        const diary = JSON.parse(localStorage.getItem("diary") || "[]");
+        if (trendChartInstance) trendChartInstance.destroy();
+        if (typeStatsChartInstance) typeStatsChartInstance.destroy();
+
+        if(diary.length === 0) {
+            document.getElementById('avg-processing-time').textContent = '- 日';
+            // Also clear charts if no data
+            const trendCtx = document.getElementById('trend-chart').getContext('2d');
+            trendChartInstance = new Chart(trendCtx, { type: 'line', data: { labels: [], datasets: [] }, options: {} });
+            const typeCtx = document.getElementById('type-stats-chart').getContext('2d');
+            typeStatsChartInstance = new Chart(typeCtx, { type: 'bar', data: { labels: [], datasets: [] }, options: {} });
+            return;
+        }
+
+        const validLogs = diary.filter(log => log.addDate && log.processedDate && !isNaN(new Date(log.addDate)) && !isNaN(new Date(log.processedDate)));
+        let totalDays = 0;
+        validLogs.forEach(log => {
+            totalDays += (new Date(log.processedDate) - new Date(log.addDate)) / 86400000;
+        });
+        const avgDays = validLogs.length > 0 ? (totalDays / validLogs.length).toFixed(1) : 0;
+        document.getElementById('avg-processing-time').textContent = `${avgDays} 日`;
+        
+        updateTrendChart();
+
+        const typeStats = {};
+        const typeNames = {};
+        document.querySelectorAll('#type option').forEach(opt => {
+            typeStats[opt.value] = { cooked: 0, disposed: 0 };
+            typeNames[opt.value] = opt.textContent;
+        });
+        diary.forEach(log => {
+            if(!typeStats[log.type]) return;
+            if(log.status === '調理') typeStats[log.type].cooked++;
+            else typeStats[log.type].disposed++;
+        });
+        const typeCtx = document.getElementById('type-stats-chart').getContext('2d');
+        typeStatsChartInstance = new Chart(typeCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(typeStats).map(key => typeNames[key]),
+                datasets: [
+                    { label: '調理', data: Object.values(typeStats).map(s => s.cooked), backgroundColor: 'rgba(40, 167, 69, 0.7)' },
+                    { label: '廃棄', data: Object.values(typeStats).map(s => s.disposed), backgroundColor: 'rgba(220, 53, 69, 0.7)' }
+                ]
+            },
+            options: { indexAxis: 'y', scales: { x: { stacked: true, ticks: { stepSize: 1, precision: 0 } }, y: { stacked: true } } }
+        });
+    }
+
+    function updateTrendChart() {
+        const diary = JSON.parse(localStorage.getItem("diary") || "[]");
+        const period = document.getElementById('trend-period').value;
+        const dataMap = new Map();
+        const labels = [];
+        const today = new Date();
+        today.setHours(0,0,0,0); // 今日の日付を午前0時に設定
+
+        if (period === '7days' || period === '30days') {
+            const days = period === '7days' ? 7 : 30;
+            for (let i = days - 1; i >= 0; i--) { // 過去N日間を逆順に生成 (今日からさかのぼる)
+                const date = new Date(today);
+                date.setDate(today.getDate() - i);
+                const dateString = date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric'});
+                labels.push(dateString);
+                dataMap.set(date.toISOString().split('T')[0], 0); // YYYY-MM-DD 形式でキーを保存
+            }
+            diary.forEach(log => {
+                const logDate = new Date(log.processedDate);
+                logDate.setHours(0,0,0,0); // ログの日付も午前0時に設定
+                const logDateString = logDate.toISOString().split('T')[0];
+                if (dataMap.has(logDateString)) {
+                    dataMap.set(logDateString, dataMap.get(logDateString) + 1);
+                }
+            });
+        } else { // byMonth
+            for (let i = 11; i >= 0; i--) { // 過去12ヶ月を逆順に生成
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const monthString = `${date.getFullYear()}/${date.getMonth() + 1}`;
+                labels.push(monthString);
+                dataMap.set(monthString, 0);
+            }
+            diary.forEach(log => {
+                const logDate = new Date(log.processedDate);
+                const monthString = `${logDate.getFullYear()}/${logDate.getMonth() + 1}`;
+                if (dataMap.has(monthString)) {
+                    dataMap.set(monthString, dataMap.get(monthString) + 1);
+                }
+            });
+        }
+        
+        const trendCtx = document.getElementById('trend-chart').getContext('2d');
+        if (trendChartInstance) trendChartInstance.destroy();
+        trendChartInstance = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '処理数',
+                    data: [...dataMap.values()], // Mapの値からデータを取得
+                    backgroundColor: 'rgba(255, 127, 80, 0.2)',
+                    borderColor: 'rgba(255, 127, 80, 1)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: { 
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { stepSize: 1, precision: 0 } 
+                    } 
+                } 
+            }
+        });
+    }
+
+    const modal = document.getElementById('confirm-modal');
+    function showClearConfirmModal() { modal.classList.add('show'); }
+    function hideClearConfirmModal() { modal.classList.remove('show'); }
+    document.getElementById('modal-confirm-btn').onclick = () => {
+        localStorage.removeItem("diary");
+        localStorage.removeItem("ingredients");
+        displayDiary(); displayIngredients();
+        hideClearConfirmModal();
+        showToast("すべてのデータを削除しました。");
+    };
+    document.getElementById('modal-cancel-btn').onclick = hideClearConfirmModal;
+    modal.onclick = (e) => { if(e.target === modal) hideClearConfirmModal(); };
+    
+    const addBtn = document.getElementById("add-btn");
+    const dropZone = document.getElementById("drop-zone");
+    addBtn.addEventListener("click", () => {
+        const name = document.getElementById("name").value.trim();
+        const type = document.getElementById("type").value;
+        const expiry = document.getElementById("expiry").value;
+        if (!name || !type || !expiry) {
+            showToast("すべての項目を入力してください", "error"); return;
+        }
+        const ingredients = JSON.parse(localStorage.getItem("ingredients") || "[]");
+        const addDate = new Date().toISOString();
+        const initialDialog = generateDialog(name, type, getDaysLeft(expiry));
+        const newIngredient = { name, type, expiry, addDate, initialDialog, userImage: droppedImageData };
+        ingredients.push(newIngredient);
+        localStorage.setItem("ingredients", JSON.stringify(ingredients));
+        displayIngredients();
+        showToast(`「${name}」を追加しました！`);
+        document.getElementById("name").value = "";
+        document.getElementById("expiry").value = "";
+        droppedImageData = null;
+        dropZone.textContent = "ここに画像をドラッグ＆ドロップ";
+    });
+
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", e => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                droppedImageData = reader.result;
+                dropZone.innerHTML = `✅ <strong>「${file.name}」</strong>をセットしました`;
+                showToast("画像をセットしました！");
+            };
+            reader.readAsDataURL(file);
+        } else { showToast("画像ファイルを選択してください。", "error"); }
+    });
+    
+    window.onload = () => {
+        showPage('home');
+        if (document.getElementById("nav-menu").classList.contains("open")) { toggleMenu(); }
+        displayIngredients();
+        displayDiary();
+    };
+  </script>
+</body>
+</html>
